@@ -1161,7 +1161,7 @@ def render_tradingview_chart(symbol: str, height: int = 400):
     </div>
 
     """
-    components.html(tv_html, height=height + 70)
+    components.html(tv_html, height=height + 130)
 
 
 def render_trial_chart():
