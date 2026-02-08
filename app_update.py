@@ -611,10 +611,10 @@ st.markdown("""
 
 
 .tv-disclaimer {
-    font-size: 12px;
+    font-size: 10px;
     color: #64748B;
     line-height: 1.6;
-    margin-top: 10px;
+    margin-top: 15px;
     padding: 8px 10px;
 
     /* 关键：避免被裁剪 */
