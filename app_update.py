@@ -1156,8 +1156,8 @@ def render_tradingview_chart(symbol: str, height: int = 400):
     <div class="tv-disclaimer">
         行情图表由第三方提供，仅作为市场数据可视化参考。<br>
         EigenFlow 不提供任何买卖建议或价格判断。<br>
-        TradingView® 为 TradingView, Inc. 的注册商标。<br>
-        本平台与 TradingView, Inc. 无合作、授权或隶属关系。
+        TradingView® 为 TradingView, Inc. 的注册商标。
+        本平台与 TradingView, Inc. 无合作、授权或隶属关系。<br>
     </div>
 
     """
