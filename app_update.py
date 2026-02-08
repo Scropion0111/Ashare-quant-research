@@ -438,15 +438,19 @@ st.markdown("""
 
 /* 免责声明条 */
 .disclaimer-bar {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin: 16px 0;
-    font-size: 0.7em;
-    color: #9ca3af;
+    background: #f8fafc;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #6b7280;
     text-align: center;
-    line-height: 1.7;
+    line-height: 1.6;
+
+    white-space: normal;
+    word-break: break-word;
 }
+
 
 /* 锁定屏幕 */
 .lock-screen {
@@ -600,11 +604,11 @@ st.markdown("""
 
 /* TradingView */
 .tv-container {
-    border-radius: 10px;
-    overflow: hidden;
-    margin: 16px 0;
-    border: 1px solid #e5e7eb;
+    width: 100%;
+    height: 420px;
+    margin-bottom: 8px;
 }
+
 
 .tv-disclaimer {
     font-size: 12px;
