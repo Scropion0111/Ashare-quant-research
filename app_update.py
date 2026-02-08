@@ -610,7 +610,7 @@ st.markdown("""
     font-size: 12px;
     color: #64748B;
     line-height: 1.6;
-    margin-top: 15px;
+    margin-top: 10px;
     padding: 8px 10px;
 
     /* 关键：避免被裁剪 */
