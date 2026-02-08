@@ -607,15 +607,19 @@ st.markdown("""
 }
 
 .tv-disclaimer {
-    font-size: 11px;
-    color: #94A3B8;
-    line-height: 1.5;
-    margin-top: 12px;
-    padding: 6px 8px;
-    background: rgba(148,163,184,0.05);
-    border-radius: 6px;
-}
+    font-size: 12px;
+    color: #64748B;
+    line-height: 1.6;
+    margin-top: 15px;
+    padding: 8px 10px;
 
+    /* 关键：避免被裁剪 */
+    white-space: normal;
+    word-break: break-word;
+
+    /* 如果被父容器裁掉 */
+    overflow: visible;
+}
 
 
 /* 卡片样式 */
