@@ -1603,7 +1603,7 @@ def main():
                 <div style="font-size: 48px; margin-bottom: 12px;">🔒</div>
                 <h3 style="color: #b91c1c; margin-bottom: 8px;">行情视图需解锁后查看</h3>
                 <h3 style="color: #b91c1c; margin-bottom: 8px;">详情请点击“支持订阅”界面</h3>
-                <p style="color: #D4AF37;">请先获取 Access Key</p>
+                <p style="color: #F59E0B;">请先获取 Access Key</p>
             </div>
             ''', unsafe_allow_html=True)
             
