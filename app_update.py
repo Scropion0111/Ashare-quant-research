@@ -1219,7 +1219,7 @@ def render_support_page():
         <div class="info-card-text">
             <ul style="margin:8px 0; padding-left:16px;">
                 <li>微信：扫描下方二维码联系</li>
-                <li>Email：research@eigenflow.io</li>
+                <li>Email：research.eigenflow@gmail.com</li>
             </ul>
         </div>
     </div>
@@ -1229,25 +1229,16 @@ def render_support_page():
     col_qr1, col_qr2 = st.columns(2)
 
     with col_qr1:
-        st.markdown('<div class="qr-area">', unsafe_allow_html=True)
-        st.markdown("**💬 微信**")
-        try:
-            st.image("wechat_qr.png", width=140)
-        except:
-            st.info("添加 wechat_qr.png")
-        st.markdown('<div class="qr-label">扫码联系</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown("### 💬 微信咨询")
+        st.image("wechat_qr.png", width=180)
+        st.caption("扫码咨询详情")
 
     with col_qr2:
-        st.markdown('<div class="qr-area">', unsafe_allow_html=True)
-        st.markdown("**💳 支付宝**")
-        try:
-            st.image("alipay_qr.png", width=140)
-        except:
-            st.info("添加 alipay_qr.png")
-        st.markdown('<div class="qr-label">扫码支付</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
+        st.markdown("### 💳 支付宝付款")
+        st.image("alipay_qr.png", width=180)
+        st.caption("付款备注：邮箱或微信号")
+        st.caption("付款后联系开通，获取Access Key解锁模型输出")
     st.markdown("---")
     
     # ========== 法务与语言威慑 ==========
