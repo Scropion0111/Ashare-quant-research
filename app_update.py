@@ -1144,7 +1144,7 @@ def render_tradingview_chart(symbol: str, height: int = 400):
     }});
     </script>
     <div class="tv-disclaimer">
-        <strong>行情图表由第三方提供，仅作为市场数据可视化参考。</strong><br>
+        行情图表由第三方提供，仅作为市场数据可视化参考。<br>
         EigenFlow 不提供任何买卖建议或价格判断。<br>
         TradingView® 为 TradingView, Inc. 的注册商标。本平台与 TradingView, Inc. 无合作、授权或隶属关系。
     </div>
@@ -1602,6 +1602,7 @@ def main():
             ">
                 <div style="font-size: 48px; margin-bottom: 12px;">🔒</div>
                 <h3 style="color: #b91c1c; margin-bottom: 8px;">行情视图需解锁后查看</h3>
+                <h3 style="color: #b91c1c; margin-bottom: 8px;">详情请点击“支持订阅”界面</h3>
                 <p style="color: #dc2626;">请先获取 Access Key</p>
             </div>
             ''', unsafe_allow_html=True)
