@@ -605,7 +605,7 @@ st.markdown("""
 /* TradingView */
 .tv-container {
     width: 100%;
-    height: 420px;
+    min-height: 420px;
     margin-bottom: 8px;
 }
 
