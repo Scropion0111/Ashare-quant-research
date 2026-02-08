@@ -607,14 +607,16 @@ st.markdown("""
 }
 
 .tv-disclaimer {
-    font-size: 0.58em;
-    color: #9ca3af;
-    text-align: center;
-    padding: 10px;
-    background: #f9fafb;
-    margin-top: 8px;
+    font-size: 11px;
+    color: #94A3B8;
     line-height: 1.5;
+    margin-top: 12px;
+    padding: 6px 8px;
+    background: rgba(148,163,184,0.05);
+    border-radius: 6px;
 }
+
+
 
 /* 卡片样式 */
 .info-card {
@@ -750,7 +752,7 @@ button[id^="trigger_"] {
     visibility: hidden !important;
     position: absolute !important;
     width: 1px !important;
-    height: 1px !important;
+    height:  auto;
     padding: 0 !important;
     margin: -1px !important;
     overflow: hidden !important;
@@ -1147,8 +1149,9 @@ def render_tradingview_chart(symbol: str, height: int = 400):
         行情图表由第三方提供，仅作为市场数据可视化参考。<br>
         EigenFlow 不提供任何买卖建议或价格判断。<br>
         TradingView® 为 TradingView, Inc. 的注册商标。<br>
-        本平台与 TradingView, Inc. 无合作、授权或隶属关系。<br>
+        本平台与 TradingView, Inc. 无合作、授权或隶属关系。
     </div>
+
     """
     components.html(tv_html, height=height + 70)
 
