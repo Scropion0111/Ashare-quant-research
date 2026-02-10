@@ -67,10 +67,15 @@ def load_regime_snapshot() -> Optional[Dict]:
     try:
         if os.path.exists(SNAPSHOT_FILE):
             with open(SNAPSHOT_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-    except:
-        pass
-    return None
+                content = f.read()
+                data = json.loads(content)
+                return data
+        else:
+            return None
+    except json.JSONDecodeError as e:
+        return None
+    except Exception as e:
+        return None
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -93,9 +98,10 @@ def load_regime_history() -> pd.DataFrame:
                 df['target_date_str'] = df['target_date'].dt.strftime('%Y-%m-%d')
 
             return df
-    except:
-        pass
-    return pd.DataFrame()
+        else:
+            return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -110,9 +116,20 @@ def load_web_top10() -> pd.DataFrame:
             df = pd.read_csv(WEB_TOP10_FILE)
             df.columns = df.columns.str.strip()
             return df
-    except:
-        pass
-    return pd.DataFrame()
+        else:
+            return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+
+
+# ==================== 调试模式 | Debug Mode ====================
+def render_debug_info():
+    """渲染调试信息（开发用，上线可关闭）"""
+    with st.expander("🔧 调试信息", expanded=False):
+        st.write(f"**APP_DIR**: `{APP_DIR}`")
+        st.write(f"**SNAPSHOT_FILE**: `{SNAPSHOT_FILE}` (存在: {os.path.exists(SNAPSHOT_FILE)})")
+        st.write(f"**WEB_TOP10_FILE**: `{WEB_TOP10_FILE}` (存在: {os.path.exists(WEB_TOP10_FILE)})")
+        st.write(f"**HISTORY_FILE**: `{HISTORY_FILE}` (存在: {os.path.exists(HISTORY_FILE)})")
 
 
 # ==================== Key 验证模块 | Access Control ====================
@@ -218,6 +235,27 @@ def format_score(value) -> str:
 st.markdown("""
 <style>
 /* ========== 基础设置 ========== */
+.info-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 16px 0;
+}
+
+.info-card-title {
+    font-size: 0.95em;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+}
+
+.info-card-text {
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    line-height: 1.7;
+}
+
 .block-container {
     max-width: 720px !important;
     padding-top: 0.5rem !important;
@@ -1275,6 +1313,9 @@ def main():
         st.session_state.verified_key_mask = None
     if 'key_states' not in st.session_state:
         st.session_state.key_states = {}
+
+    # 渲染调试信息（开发用）
+    render_debug_info()
 
     # 渲染头部
     render_brand_header()
