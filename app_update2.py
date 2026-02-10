@@ -6,7 +6,7 @@ Quantitative Research Platform - Institutional Grade
 【核心设计理念】
 ├── T+1 数据映射（计算日 → 生效交易日）
 ├── 顶级UI/UX（专业感+信任度）
-├── 极简数据路径（所有文件同级目录）
+├── 极简数据路径（本地文件直接读取）
 └── 合规克制表达
 
 ================================================================================
@@ -17,6 +17,7 @@ import pandas as pd
 import json
 import hashlib
 import uuid
+import os
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, Tuple
 import streamlit.components.v1 as components
@@ -30,15 +31,39 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ==================== 数据源路径（极简同级目录） ====================
+# 项目目录（本地文件）
+APP_DIR = os.path.dirname(__file__)
 
-# 【生产环境配置】修改这里为你的 GitHub Raw 基础地址
+# 本地数据文件路径
+SNAPSHOT_FILE = os.path.join(APP_DIR, 'regime_snapshot.json')
+WEB_TOP10_FILE = os.path.join(APP_DIR, 'web_top10.csv')
+HISTORY_FILE = os.path.join(APP_DIR, 'regime_history.csv')
+
+# 【可选：远程模式】如需从 GitHub 加载，定义以下变量
+"""
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/<username>/<repo>/main/"
-
-# 文件URL模板（同级目录）
-REGIME_HISTORY_URL = GITHUB_RAW_BASE + "regime_history.csv"
-WEB_TOP10_URL = GITHUB_RAW_BASE + "web_top10.csv"
 SNAPSHOT_URL = GITHUB_RAW_BASE + "regime_snapshot.json"
+WEB_TOP10_URL = GITHUB_RAW_BASE + "web_top10.csv"
+HISTORY_URL = GITHUB_RAW_BASE + "regime_history.csv"
+"""
+
+# ==================== 数据源路径（极简本地文件） ====================
+
+APP_DIR = os.path.dirname(__file__)
+
+# 本地文件路径
+SNAPSHOT_FILE = os.path.join(APP_DIR, 'regime_snapshot.json')
+WEB_TOP10_FILE = os.path.join(APP_DIR, 'web_top10.csv')
+HISTORY_FILE = os.path.join(APP_DIR, 'regime_history.csv')
+
+# 【可选：远程模式】如需从 GitHub 加载，取消注释以下代码
+# 并注释掉上面的本地文件路径
+"""
+GITHUB_RAW_BASE = "https://raw.githubusercontent.com/<username>/<repo>/main/"
+SNAPSHOT_URL = GITHUB_RAW_BASE + "regime_snapshot.json"
+WEB_TOP10_URL = GITHUB_RAW_BASE + "web_top10.csv"
+HISTORY_URL = GITHUB_RAW_BASE + "regime_history.csv"
+"""
 
 # ==================== 订阅配置 ====================
 
@@ -49,28 +74,27 @@ SHARE_CONFIG = {
     'device_threshold': 2,
 }
 
-# ==================== 数据加载模块 | Data Loading ====================
+# ==================== 数据加载模块 | 本地文件 ====================
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_regime_snapshot() -> Optional[Dict]:
     """
-    加载实时快照
-    regime_snapshot.json 结构（前端实时读取）:
+    加载实时快照（本地文件）
+    regime_snapshot.json 结构：
     {
-        "target_date": "2026-02-10",      # 目标交易日（T+1）
-        "calculation_date": "2026-02-09",  # 计算日期（T）
-        "market_regime": "Risk Off",       # 市场状态
-        "action": "Defensive",             # 行动建议
-        "shibor_2w": 1.584,               # Shibor
-        "rsi_5": 54.54,                   # RSI-5
-        "signal_strength": "Medium",       # 信号强度
+        "target_date": "2026-02-10",       // 目标交易日（T+1）
+        "calculation_date": "2026-02-09",   // 计算日期（T）
+        "market_regime": "Risk Off",        // 市场状态
+        "action": "Defensive",              // 行动建议
+        "shibor_2w": 1.584,
+        "rsi_5": 54.54,
         "last_updated": "2026-02-09 21:16"
     }
     """
     try:
-        resp = requests.get(SNAPSHOT_URL, timeout=10)
-        if resp.status_code == 200:
-            return resp.json()
+        if os.path.exists(SNAPSHOT_FILE):
+            with open(SNAPSHOT_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
     except:
         pass
     return None
@@ -79,23 +103,19 @@ def load_regime_snapshot() -> Optional[Dict]:
 @st.cache_data(ttl=60, show_spinner=False)
 def load_regime_history() -> pd.DataFrame:
     """
-    加载历史Regime数据
+    加载历史Regime数据（本地文件）
     用途：生成历史时间轴和统计
 
     注意：T日计算的risk_on → 指导T+1日交易
-    因此最后一行(2026-02-09 risk_on=0) 对应显示为 02-10 的市场展望
     """
     try:
-        resp = requests.get(REGIME_HISTORY_URL, timeout=10)
-        if resp.status_code == 200:
-            from io import StringIO
-            df = pd.read_csv(StringIO(resp.text))
+        if os.path.exists(HISTORY_FILE):
+            df = pd.read_csv(HISTORY_FILE)
             df.columns = df.columns.str.strip()
 
             # 核心处理：计算"目标交易日"（T+1）
             if 'date' in df.columns:
                 df['date'] = pd.to_datetime(df['date'])
-                # 目标交易日 = 计算日期 + 1天
                 df['target_date'] = df['date'] + timedelta(days=1)
                 df['target_date_str'] = df['target_date'].dt.strftime('%Y-%m-%d')
 
@@ -108,15 +128,13 @@ def load_regime_history() -> pd.DataFrame:
 @st.cache_data(ttl=300, show_spinner=False)
 def load_web_top10() -> pd.DataFrame:
     """
-    加载Top10信号数据
+    加载Top10信号数据（本地文件）
     web_top10.csv 字段:
     Rank, Symbol, Alpha Score, 1D Return, 20D Momentum, Size, Liquidity
     """
     try:
-        resp = requests.get(WEB_TOP10_URL, timeout=10)
-        if resp.status_code == 200:
-            from io import StringIO
-            df = pd.read_csv(StringIO(resp.text))
+        if os.path.exists(WEB_TOP10_FILE):
+            df = pd.read_csv(WEB_TOP10_FILE)
             df.columns = df.columns.str.strip()
             return df
     except:
