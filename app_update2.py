@@ -1,25 +1,23 @@
 """
 ================================================================================
-EigenFlow | 量化研究订阅平台 v3.0
+EigenFlow | 量化研究订阅平台 v3.5
 Quantitative Research Platform - Institutional Grade
 
-【产品架构】
-├── GitHub Raw 数据源（稳定可靠）
-├── 4页面SPA架构（信号/行情/历史/订阅）
-├── 机构级深蓝主题（信任+专业）
-└── 合规克制设计（研究参考定位）
+【核心设计理念】
+├── T+1 数据映射（计算日 → 生效交易日）
+├── 顶级UI/UX（专业感+信任度）
+├── 极简数据路径（所有文件同级目录）
+└── 合规克制表达
 
 ================================================================================
 """
 
 import streamlit as st
 import pandas as pd
-import requests
 import json
 import hashlib
 import uuid
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 import streamlit.components.v1 as components
 
@@ -32,16 +30,17 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# ==================== 数据源路径（极简同级目录） ====================
 
+# 【生产环境配置】修改这里为你的 GitHub Raw 基础地址
+GITHUB_RAW_BASE = "https://raw.githubusercontent.com/<username>/<repo>/main/"
 
+# 文件URL模板（同级目录）
+REGIME_HISTORY_URL = GITHUB_RAW_BASE + "regime_history.csv"
+WEB_TOP10_URL = GITHUB_RAW_BASE + "web_top10.csv"
+SNAPSHOT_URL = GITHUB_RAW_BASE + "regime_snapshot.json"
 
-
-REGIME_SNAPSHOT_TEMPLATE = "regime_snapshot.json"
-WEB_TOP10_TEMPLATE = "web_top10.csv"
-REGIME_HISTORY_URL = "regime_history.csv"
-
-
-# ==================== 本地配置 ====================
+# ==================== 订阅配置 ====================
 
 KEY_VALIDITY_DAYS = 30
 SHARE_CONFIG = {
@@ -53,36 +52,23 @@ SHARE_CONFIG = {
 # ==================== 数据加载模块 | Data Loading ====================
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_latest_dir() -> Optional[str]:
+def load_regime_snapshot() -> Optional[Dict]:
     """
-    加载最新日期目录名
-    LATEST.txt 内容示例：2026-02-09_risk_off
-    """
-    try:
-        resp = requests.get(LATEST_URL, timeout=10)
-        if resp.status_code == 200:
-            # 纯文本，每行一个目录名，取第一行
-            latest = resp.text.strip().split('\n')[0].strip()
-            return latest
-    except:
-        pass
-    return None
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def load_regime_snapshot(latest_dir: str) -> Optional[Dict]:
-    """
-    加载Regime快照
-    regime_snapshot.json 结构:
+    加载实时快照
+    regime_snapshot.json 结构（前端实时读取）:
     {
-      "date": "2026-02-09",
-      "risk_flag": "risk_off",
-      "risk_value": 0
+        "target_date": "2026-02-10",      # 目标交易日（T+1）
+        "calculation_date": "2026-02-09",  # 计算日期（T）
+        "market_regime": "Risk Off",       # 市场状态
+        "action": "Defensive",             # 行动建议
+        "shibor_2w": 1.584,               # Shibor
+        "rsi_5": 54.54,                   # RSI-5
+        "signal_strength": "Medium",       # 信号强度
+        "last_updated": "2026-02-09 21:16"
     }
     """
     try:
-        url = REGIME_SNAPSHOT_TEMPLATE.format(latest_dir=latest_dir)
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(SNAPSHOT_URL, timeout=10)
         if resp.status_code == 200:
             return resp.json()
     except:
@@ -90,33 +76,14 @@ def load_regime_snapshot(latest_dir: str) -> Optional[Dict]:
     return None
 
 
-@st.cache_data(ttl=300, show_spinner=False)
-def load_web_top10(latest_dir: str) -> pd.DataFrame:
-    """
-    加载Top10信号数据
-    web_top10.csv 字段:
-    Rank, Symbol, Alpha Score, 1D Return, 20D Momentum, Size, Liquidity
-    """
-    try:
-        url = WEB_TOP10_TEMPLATE.format(latest_dir=latest_dir)
-        resp = requests.get(url, timeout=10)
-        if resp.status_code == 200:
-            from io import StringIO
-            df = pd.read_csv(StringIO(resp.text))
-            # 标准化字段名
-            df.columns = df.columns.str.strip()
-            return df
-    except:
-        pass
-    return pd.DataFrame()
-
-
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def load_regime_history() -> pd.DataFrame:
     """
     加载历史Regime数据
-    regime_history.csv 字段:
-    date, shibor_2w, 涨跌, rsi_5, risk_on
+    用途：生成历史时间轴和统计
+
+    注意：T日计算的risk_on → 指导T+1日交易
+    因此最后一行(2026-02-09 risk_on=0) 对应显示为 02-10 的市场展望
     """
     try:
         resp = requests.get(REGIME_HISTORY_URL, timeout=10)
@@ -124,6 +91,14 @@ def load_regime_history() -> pd.DataFrame:
             from io import StringIO
             df = pd.read_csv(StringIO(resp.text))
             df.columns = df.columns.str.strip()
+
+            # 核心处理：计算"目标交易日"（T+1）
+            if 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date'])
+                # 目标交易日 = 计算日期 + 1天
+                df['target_date'] = df['date'] + timedelta(days=1)
+                df['target_date_str'] = df['target_date'].dt.strftime('%Y-%m-%d')
+
             return df
     except:
         pass
@@ -131,30 +106,22 @@ def load_regime_history() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def load_regime_latest() -> Optional[Dict]:
+def load_web_top10() -> pd.DataFrame:
     """
-    加载最新Regime数据
-    regime_latest.csv 字段:
-    date, shibor_2w, 涨跌, rsi_5, risk_on, update_time
+    加载Top10信号数据
+    web_top10.csv 字段:
+    Rank, Symbol, Alpha Score, 1D Return, 20D Momentum, Size, Liquidity
     """
     try:
-        resp = requests.get(REGIME_LATEST_URL, timeout=10)
+        resp = requests.get(WEB_TOP10_URL, timeout=10)
         if resp.status_code == 200:
             from io import StringIO
             df = pd.read_csv(StringIO(resp.text))
-            if not df.empty:
-                row = df.iloc[0]
-                return {
-                    'date': str(row.get('date', '')),
-                    'shibor_2w': row.get('shibor_2w'),
-                    '涨跌': row.get('涨跌'),
-                    'rsi_5': row.get('rsi_5'),
-                    'risk_on': row.get('risk_on', 0),
-                    'update_time': str(row.get('update_time', ''))
-                }
+            df.columns = df.columns.str.strip()
+            return df
     except:
         pass
-    return None
+    return pd.DataFrame()
 
 
 # ==================== Key 验证模块 | Access Control ====================
@@ -162,7 +129,7 @@ def load_regime_latest() -> Optional[Dict]:
 def validate_access_key(key: str) -> dict:
     """验证Access Key"""
     key = key.strip().upper()
-    
+
     # 从环境变量或 secrets 加载有效Key
     valid_keys = []
     try:
@@ -170,39 +137,37 @@ def validate_access_key(key: str) -> dict:
             valid_keys = st.secrets.access_keys.get('keys', [])
     except:
         pass
-    
+
     if not valid_keys:
         valid_keys = [
             "EF-26Q1-A9F4KZ2M",
             "EF-26Q1-B3H8LP5N",
             "EF-26Q1-C7J2MR9R",
         ]
-    
+
     if key not in valid_keys:
         return {'valid': False}
-    
-    # 检查有效期（简化版：30天）
+
+    # 检查有效期
     now = datetime.now()
-    
-    # 从session_state读取首次使用时间
     key_state = st.session_state.get('key_states', {})
     key_info = key_state.get(key, {})
-    
+
     first_seen = key_info.get('first_seen')
     if not first_seen:
         first_seen = now.strftime('%Y-%m-%d')
         key_state[key] = {'first_seen': first_seen}
         st.session_state.key_states = key_state
-    
+
     try:
         first_date = datetime.strptime(first_seen, '%Y-%m-%d')
         days_used = (now - first_date).days
     except:
         days_used = 0
-    
+
     if days_used >= KEY_VALIDITY_DAYS:
         return {'valid': False, 'expired': True, 'first_seen': first_seen}
-    
+
     return {
         'valid': True,
         'key_mask': mask_key(key),
@@ -216,13 +181,6 @@ def mask_key(key: str) -> str:
     if len(key) >= 12:
         return f"{key[:8]}{'****'}{key[-4:]}"
     return key[:6] + '****'
-
-
-def get_device_id():
-    """获取设备ID"""
-    if 'device_id' not in st.session_state:
-        st.session_state.device_id = str(uuid.uuid4())
-    return st.session_state.device_id
 
 
 # ==================== 工具函数 | Utilities ====================
@@ -242,19 +200,10 @@ def get_tradingview_symbol(stock_code):
     return f"SSE:{code}"
 
 
-def format_percent(value: float, decimals: int = 2) -> str:
-    """格式化百分比显示"""
-    if pd.isna(value):
-        return "—"
-    sign = "+" if value > 0 else ""
-    return f"{sign}{value:.{decimals}f}%"
-
-
 def format_percent_from_raw(raw_value) -> str:
     """从原始值（含%或不含）格式化百分比"""
     if pd.isna(raw_value):
         return "—"
-    # 处理字符串中的%
     val_str = str(raw_value).strip()
     if '%' in val_str:
         val_str = val_str.replace('%', '')
@@ -266,7 +215,7 @@ def format_percent_from_raw(raw_value) -> str:
         return "—"
 
 
-def format_score(value: float) -> str:
+def format_score(value) -> str:
     """格式化评分"""
     if pd.isna(value):
         return "—"
@@ -300,7 +249,6 @@ header {visibility: hidden;}
     --accent-purple-hover: #4F46E5;
     --accent-purple-gradient: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
     --gold-accent: #C9A227;
-    --gold-light: #FCD34D;
     --risk-on: #059669;
     --risk-off: #DC2626;
     --border-subtle: #1E293B;
@@ -333,47 +281,42 @@ body {
     letter-spacing: 2px;
 }
 
-/* ========== 通用卡片 ========== */
-.info-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-subtle);
-    border-radius: 12px;
-    padding: 20px;
-    margin: 16px 0;
-}
-
-.info-card-title {
-    font-size: 0.95em;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 10px;
-}
-
-.info-card-text {
-    font-size: 0.82em;
-    color: var(--text-secondary);
-    line-height: 1.7;
-}
-
-/* ========== Regime 卡片（顶部免费区） ========== */
+/* ========== Regime 核心卡片（顶部） ========== */
 .regime-card {
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     border-radius: 16px;
-    padding: 24px;
+    padding: 28px;
     margin: 16px 0 24px;
     text-align: center;
 }
 
+/* 标题区 */
+.regime-title {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+}
+
+.regime-target-date {
+    font-size: 1.8em;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+}
+
+/* 状态徽章 */
 .regime-badge {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    border-radius: 10px;
-    font-size: 1.1em;
+    gap: 10px;
+    padding: 14px 28px;
+    border-radius: 12px;
+    font-size: 1.15em;
     font-weight: 600;
-    margin-bottom: 12px;
+    margin-bottom: 16px;
 }
 
 .regime-badge.risk-on {
@@ -388,30 +331,53 @@ body {
     border: 1px solid rgba(220, 38, 38, 0.3);
 }
 
-.regime-meta {
-    display: flex;
-    justify-content: center;
-    gap: 24px;
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border-subtle);
+/* 行动建议 */
+.regime-action {
+    font-size: 0.95em;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border-subtle);
 }
 
-.regime-meta-item {
+/* 指标区 */
+.regime-metrics {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    padding-top: 16px;
+}
+
+.regime-metric {
     text-align: center;
 }
 
-.regime-meta-label {
-    font-size: 0.7em;
+.regime-metric-label {
+    font-size: 0.68em;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 1px;
+    margin-bottom: 6px;
 }
 
-.regime-meta-value {
-    font-size: 0.9em;
+.regime-metric-value {
+    font-size: 1.1em;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+/* 时间戳 */
+.regime-timestamp {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--border-subtle);
+    font-size: 0.72em;
+    color: var(--text-muted);
+    line-height: 1.8;
+}
+
+.regime-timestamp strong {
     color: var(--text-secondary);
-    margin-top: 4px;
 }
 
 /* ========== 信号表格 ========== */
@@ -733,11 +699,11 @@ body {
         padding: 10px 16px;
         font-size: 0.85em;
     }
-    
-    .regime-meta {
-        gap: 16px;
+
+    .regime-metrics {
+        gap: 20px;
     }
-    
+
     .signal-table th,
     .signal-table td {
         padding: 10px 8px;
@@ -773,15 +739,15 @@ def render_nav_tabs(current_tab: int = 0):
         (2, "📜", "历史记录"),
         (3, "☕", "支持订阅"),
     ]
-    
+
     # 获取URL参数
     url_tab = st.query_params.get("tab", None)
     if url_tab is not None:
         current_tab = int(url_tab)
-    
+
     # 渲染导航
     st.markdown('<div class="nav-wrapper"><div class="nav-container">', unsafe_allow_html=True)
-    
+
     for idx, icon, name in tabs:
         active = 'active' if current_tab == idx else ''
         st.markdown(
@@ -790,75 +756,97 @@ def render_nav_tabs(current_tab: int = 0):
             </a>''',
             unsafe_allow_html=True
         )
-    
+
     st.markdown('</div></div>', unsafe_allow_html=True)
 
 
-def render_regime_card(snapshot: Dict = None, latest: Dict = None):
+def render_regime_card(snapshot: Dict = None):
     """
-    渲染顶部免费Regime卡片
-    使用 regime_snapshot.json + regime_latest.csv 的数据
-    """
-    # 从 snapshot 获取基本信息
-    risk_on = 1 if latest and latest.get('risk_on', 0) == 1 else 0
-    is_risk_on = risk_on == 1
+    【核心组件】渲染次日市场展望卡片
+    T日计算 → T+1日生效
 
+    展示内容：
+    1. 标题："次日市场展望"
+    2. 目标日期：YYYY-MM-DD
+    3. 状态徽章：Risk On / Risk Off
+    4. 行动建议：做多 / 防御
+    5. 核心指标：Shibor、RSI
+    6. 时间戳：计算时间 + 生效时间
+    """
+    # 解析数据
+    target_date = "—"
+    regime = "Unknown"
+    action = "—"
+    shibor = None
+    rsi = None
+    calc_date = "—"
+    last_updated = "—"
+
+    if snapshot:
+        target_date = snapshot.get('target_date', '—')
+        regime = snapshot.get('market_regime', 'Unknown')
+        action = snapshot.get('action', '—')
+        shibor = snapshot.get('shibor_2w')
+        rsi = snapshot.get('rsi_5')
+        calc_date = snapshot.get('calculation_date', '—')
+        last_updated = snapshot.get('last_updated', '—')
+
+    is_risk_on = regime.lower() == 'risk on' or regime.lower() == 'risk_on'
     badge_class = 'risk-on' if is_risk_on else 'risk-off'
     badge_text = '🟢 Risk On' if is_risk_on else '🔴 Risk Off'
+    action_text = '积极做多' if is_risk_on else '防御观望'
 
-    # 从 latest 获取数据
-    date_str = latest.get('date', '—') if latest else snapshot.get('date', '—') if snapshot else '—'
-    shibor = latest.get('shibor_2w') if latest else None
-    rsi = latest.get('rsi_5') if latest else None
-    update_time = latest.get('update_time', '') if latest else ''
-
-    # 格式化更新时间
-    if update_time:
-        try:
-            dt = datetime.strptime(update_time.split()[0], '%Y-%m-%d')
-            update_time = dt.strftime('%Y-%m-%d')
-        except:
-            pass
+    # 格式化日期显示
+    try:
+        if target_date != '—':
+            dt = datetime.strptime(target_date, '%Y-%m-%d')
+            target_display = dt.strftime('%Y/%m/%d')
+        else:
+            target_display = '—'
+    except:
+        target_display = target_date
 
     st.markdown(f'''
     <div class="regime-card">
-        <div class="regime-badge {badge_class}">{badge_text}</div>
-        <div style="font-size: 0.78em; color: var(--text-muted); margin-top: 4px;">
-            市场状态判断 · 仅供研究参考
-        </div>
+        <!-- 标题 -->
+        <div class="regime-title">📅 次日市场展望</div>
 
-        <div class="regime-meta">
-            <div class="regime-meta-item">
-                <div class="regime-meta-label">日期</div>
-                <div class="regime-meta-value">{date_str}</div>
-            </div>
+        <!-- 目标日期 -->
+        <div class="regime-target-date">{target_display}</div>
+
+        <!-- 状态徽章 -->
+        <div class="regime-badge {badge_class}">{badge_text}</div>
+
+        <!-- 行动建议 -->
+        <div class="regime-action">策略建议：{action_text}</div>
+
+        <!-- 核心指标 -->
+        <div class="regime-metrics">
     ''', unsafe_allow_html=True)
 
     if shibor is not None:
         st.markdown(f'''
-            <div class="regime-meta-item">
-                <div class="regime-meta-label">Shibor 2W</div>
-                <div class="regime-meta-value">{shibor:.3f}%</div>
+            <div class="regime-metric">
+                <div class="regime-metric-label">Shibor 2W</div>
+                <div class="regime-metric-value">{shibor:.3f}%</div>
             </div>
         ''', unsafe_allow_html=True)
 
     if rsi is not None:
         st.markdown(f'''
-            <div class="regime-meta-item">
-                <div class="regime-meta-label">RSI-5</div>
-                <div class="regime-meta-value">{rsi:.1f}</div>
-            </div>
-        ''', unsafe_allow_html=True)
-
-    if update_time:
-        st.markdown(f'''
-            <div class="regime-meta-item">
-                <div class="regime-meta-label">更新时间</div>
-                <div class="regime-meta-value">{update_time}</div>
+            <div class="regime-metric">
+                <div class="regime-metric-label">RSI-5</div>
+                <div class="regime-metric-value">{rsi:.1f}</div>
             </div>
         ''', unsafe_allow_html=True)
 
     st.markdown('''
+        </div>
+
+        <!-- 时间戳 -->
+        <div class="regime-timestamp">
+            <strong>数据计算：</strong>''' + calc_date + '''<br>
+            <strong>更新于：</strong>''' + last_updated + '''
         </div>
     </div>
     ''', unsafe_allow_html=True)
@@ -882,7 +870,7 @@ def render_signal_table(df: pd.DataFrame, unlocked: bool = True, limit: int = 2)
     else:
         df_display = df.copy()
 
-    # 构建表格HTML（匹配用户字段名）
+    # 构建表格HTML
     table_html = '''
     <table class="signal-table">
         <thead>
@@ -904,7 +892,7 @@ def render_signal_table(df: pd.DataFrame, unlocked: bool = True, limit: int = 2)
         symbol = format_stock_code(str(row.get('Symbol', '')))
         alpha = format_score(row.get('Alpha Score', row.get('Score', 0)))
 
-        # 解析1D Return（可能有%符号）
+        # 解析1D Return
         ret_1d_raw = row.get('1D Return', row.get('Return_1D', 0))
         ret_1d = format_percent_from_raw(ret_1d_raw)
         ret_1d_class = 'pos' if '+' in ret_1d or float(str(ret_1d_raw).replace('%', '').replace('+', '')) > 0 else 'neg'
@@ -964,22 +952,22 @@ def render_locked_prompt(page_name: str = "此页面"):
     ''', unsafe_allow_html=True)
 
 
-def render_access_input(key_name: str = "Access Key"):
+def render_access_input():
     """渲染Key输入框"""
     col1, col2 = st.columns([3, 1])
-    
+
     with col1:
         access_key = st.text_input(
-            key_name,
+            "Access Key",
             type="password",
             placeholder="EF-26Q1-XXXXXXXX",
             label_visibility="collapsed",
             key=f"access_input_{uuid.uuid4().hex[:8]}"
         )
-    
+
     with col2:
         confirm = st.button("验证", type="primary", use_container_width=True)
-    
+
     return access_key, confirm
 
 
@@ -999,7 +987,7 @@ def render_watermark(key_mask: str = None):
         text = f"授权码：{key_mask} | 仅限个人研究使用"
     else:
         text = "EigenFlow Research"
-    
+
     st.markdown(f'<div class="watermark">{text}</div>', unsafe_allow_html=True)
 
 
@@ -1037,7 +1025,7 @@ def render_tradingview_chart(symbol: str, height: int = 400):
         "container_id": "tradingview_widget"
     }});
     </script>
-    
+
     <div class="tv-disclaimer">
         本页面行情图表由第三方数据服务提供，仅用于市场数据展示与可视化分析参考。<br>
         图表内容不构成任何买卖建议、价格预测或投资判断。<br>
@@ -1050,7 +1038,7 @@ def render_tradingview_chart(symbol: str, height: int = 400):
 
 # ==================== 历史记录页面 ====================
 
-def render_history_page(df_history: pd.DataFrame, latest: Dict = None):
+def render_history_page(df_history: pd.DataFrame, snapshot: Dict = None):
     """渲染历史记录页面"""
     # 标题
     st.markdown('''
@@ -1058,11 +1046,13 @@ def render_history_page(df_history: pd.DataFrame, latest: Dict = None):
         <div class="info-card-title">📜 市场状态历史</div>
         <div class="info-card-text">
             最近 30 个交易日市场状态记录。绿色为 Risk On 阶段，红色为 Risk Off 阶段。
+            <br><br>
+            <strong style="color: var(--text-muted);">注：T日计算结果指导 T+1 日交易</strong>
         </div>
     </div>
     ''', unsafe_allow_html=True)
 
-    if df_history.empty or 'date' not in df_history.columns:
+    if df_history.empty or 'target_date_str' not in df_history.columns:
         st.markdown('''
         <div class="info-card" style="text-align: center; padding: 40px;">
             <div style="font-size: 1.1em; color: var(--text-muted);">
@@ -1074,16 +1064,17 @@ def render_history_page(df_history: pd.DataFrame, latest: Dict = None):
 
     # 取最近30条
     df_recent = df_history.tail(30).copy()
-    df_recent = df_recent.iloc[::-1]  # 倒序：最近的在右边
+    df_recent = df_recent.iloc[::-1]  # 倒序
 
-    # 时间轴
+    # 时间轴（使用target_date）
     timeline_html = '<div class="timeline-container">'
     for _, row in df_recent.iterrows():
-        date = str(row.get('date', ''))
+        target_date = str(row.get('target_date_str', ''))
         risk_on = int(row.get('risk_on', 0))
         is_on = risk_on == 1
         bar_class = 'risk-on' if is_on else 'risk-off'
-        timeline_html += f'<div class="timeline-bar {bar_class}" title="{date}: {"Risk On" if is_on else "Risk Off"}"></div>'
+        title = f"交易日期: {target_date} | {'Risk On' if is_on else 'Risk Off'}"
+        timeline_html += f'<div class="timeline-bar {bar_class}" title="{title}"></div>'
     timeline_html += '</div>'
 
     st.markdown(timeline_html, unsafe_allow_html=True)
@@ -1093,18 +1084,18 @@ def render_history_page(df_history: pd.DataFrame, latest: Dict = None):
     <table class="signal-table">
         <thead>
             <tr>
-                <th style="width: 25%;">Date</th>
+                <th style="width: 25%;">交易日期</th>
                 <th style="width: 15%;">RSI-5</th>
                 <th style="width: 15%;">Shibor</th>
                 <th style="width: 20%;">涨跌</th>
-                <th style="width: 25%;">Regime</th>
+                <th style="width: 25%;">市场状态</th>
             </tr>
         </thead>
         <tbody>
     '''
 
     for _, row in df_recent.iterrows():
-        date = str(row.get('date', ''))
+        target_date = str(row.get('target_date_str', ''))
         rsi = row.get('rsi_5')
         shibor = row.get('shibor_2w')
         change = row.get('涨跌')
@@ -1118,7 +1109,7 @@ def render_history_page(df_history: pd.DataFrame, latest: Dict = None):
 
         table_html += f'''
         <tr>
-            <td style="color: var(--text-primary);">{date}</td>
+            <td style="color: var(--text-primary);">{target_date}</td>
             <td style="color: var(--text-secondary);">{rsi_str}</td>
             <td style="color: var(--text-secondary);">{shibor_str}</td>
             <td style="color: {'#34D399' if (change or 0) > 0 else '#F87171'};">{change_str}</td>
@@ -1134,8 +1125,9 @@ def render_history_page(df_history: pd.DataFrame, latest: Dict = None):
     on_days = int(df_recent['risk_on'].sum()) if 'risk_on' in df_recent.columns else 0
     off_days = total_days - on_days
 
-    # 从最新数据获取当前状态
-    current_risk_on = latest.get('risk_on', 0) if latest else 0
+    # 当前状态（从snapshot获取）
+    current_regime = snapshot.get('market_regime', 'Unknown') if snapshot else 'Unknown'
+    is_current_on = current_regime.lower() == 'risk on' or current_regime.lower() == 'risk_on'
 
     st.markdown(f'''
     <div class="info-card" style="margin-top: 20px;">
@@ -1156,14 +1148,14 @@ def render_history_page(df_history: pd.DataFrame, latest: Dict = None):
         </div>
         <div style="text-align: center; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-subtle);">
             <span style="
-                background: rgba({'5, 150, 105' if current_risk_on == 1 else '220, 38, 38'}, 0.15);
-                border: 1px solid rgba({'5, 150, 105' if current_risk_on == 1 else '220, 38, 38'}, 0.3);
+                background: rgba({'5, 150, 105' if is_current_on else '220, 38, 38'}, 0.15);
+                border: 1px solid rgba({'5, 150, 105' if is_current_on else '220, 38, 38'}, 0.3);
                 padding: 8px 16px;
                 border-radius: 6px;
                 font-size: 0.85em;
-                color: {'#34D399' if current_risk_on == 1 else '#F87171'};
+                color: {'#34D399' if is_current_on else '#F87171'};
             ">
-                当前状态: {"Risk On" if current_risk_on == 1 else "Risk Off"}
+                当前状态: {"Risk On" if is_current_on else "Risk Off"}
             </span>
         </div>
     </div>
@@ -1189,7 +1181,7 @@ def render_subscribe_page():
         </div>
     </div>
     ''', unsafe_allow_html=True)
-    
+
     # 第二块：价格
     st.markdown('''
     <div class="info-card">
@@ -1211,7 +1203,7 @@ def render_subscribe_page():
         </div>
     </div>
     ''', unsafe_allow_html=True)
-    
+
     # 第三块：获取Key
     st.markdown('''
     <div class="info-card">
@@ -1224,10 +1216,10 @@ def render_subscribe_page():
         </div>
     </div>
     ''', unsafe_allow_html=True)
-    
+
     # 二维码
     col_qr1, col_qr2 = st.columns(2)
-    
+
     with col_qr1:
         st.markdown('<div class="qr-area">', unsafe_allow_html=True)
         st.markdown("**💬 微信咨询**")
@@ -1237,7 +1229,7 @@ def render_subscribe_page():
             st.markdown("<!-- wechat_qr.png -->")
         st.markdown('<div class="qr-label">扫码咨询详情</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
-    
+
     with col_qr2:
         st.markdown('<div class="qr-area">', unsafe_allow_html=True)
         st.markdown("**💳 支付宝付款**")
@@ -1247,25 +1239,25 @@ def render_subscribe_page():
             st.markdown("<!-- alipay_qr.png -->")
         st.markdown('<div class="qr-label">付款备注：邮箱或微信号</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
-    
+
     # FAQ
     with st.expander("📋 常见问题", expanded=False):
         st.markdown('''
         <div style="font-size: 0.82em; color: var(--text-secondary); line-height: 1.8;">
             <p><strong>Q: 数据更新频率？</strong><br>
             A: 每个交易日晚间更新一次。</p>
-            
+
             <p><strong>Q: Access Key 可以多设备使用吗？</strong><br>
             A: 单个 Key 限个人研究使用，多设备异常使用可能被风控。</p>
-            
+
             <p><strong>Q: 订阅后可以退款吗？</strong><br>
             A: 虚拟内容，订阅后不支持退款。</p>
-            
+
             <p><strong>Q: 这是投资建议吗？</strong><br>
             A: 不是。本平台仅提供研究参考，不构成任何投资建议。</p>
         </div>
         ''', unsafe_allow_html=True)
-    
+
     # 使用声明
     st.markdown('''
     <div class="info-card" style="margin-top: 16px;">
@@ -1304,104 +1296,82 @@ def main():
     render_nav_tabs(current_tab)
 
     # 加载数据
-    latest_dir = load_latest_dir()
-    regime_snapshot = load_regime_snapshot(latest_dir) if latest_dir else None
-    regime_latest = load_regime_latest()
+    snapshot = load_regime_snapshot()
     df_history = load_regime_history()
+    df_top10 = load_web_top10()
 
     # 页面内容
     if current_tab == 0:
         # ===== 信号清单页 =====
-        if latest_dir:
-            df_top10 = load_web_top10(latest_dir)
 
-            # 渲染Regime卡片（使用regime_latest数据）
-            render_regime_card(snapshot=regime_snapshot, latest=regime_latest)
+        # 渲染核心Regime卡片
+        render_regime_card(snapshot)
 
-            # 检查是否解锁
-            verified = st.session_state.get('verified_key') is not None
+        # 检查是否解锁
+        verified = st.session_state.get('verified_key') is not None
 
-            if verified:
-                # 已解锁：显示完整表格
-                render_signal_table(df_top10, unlocked=True)
+        if verified:
+            # 已解锁：显示完整表格
+            render_signal_table(df_top10, unlocked=True)
 
-                # 显示Key信息
-                key_mask = st.session_state.get('verified_key_mask', '')
-                st.markdown(f'''
-                <div style="text-align: center; margin: 16px 0;">
-                    <span style="
-                        background: rgba(201, 162, 39, 0.1);
-                        border: 1px solid rgba(201, 162, 39, 0.3);
-                        padding: 8px 16px;
-                        border-radius: 6px;
-                        font-size: 0.78em;
-                        color: var(--gold-accent);
-                    ">
-                        已解锁 | {key_mask}
-                    </span>
-                </div>
-                ''', unsafe_allow_html=True)
-            else:
-                # 未解锁：显示预览 + 锁定
-                render_signal_table(df_top10, unlocked=False, limit=2)
-
-                # 引导输入Key
-                st.markdown('''
-                <div style="margin: 20px 0;">
-                ''', unsafe_allow_html=True)
-
-                access_key, confirm = render_access_input()
-
-                if confirm and access_key:
-                    result = validate_access_key(access_key)
-                    if result.get('valid'):
-                        st.session_state.verified_key = access_key
-                        st.session_state.verified_key_mask = result.get('key_mask', mask_key(access_key))
-                        st.success("✅ 验证成功！")
-                        st.rerun()
-                    else:
-                        st.error("❌ 无效或已过期的 Access Key")
-
-                st.markdown('</div>', unsafe_allow_html=True)
-
-                # 快捷入口
-                st.markdown('''
-                <div style="text-align: center; margin: 16px 0;">
-                    <span style="color: var(--text-muted); font-size: 0.85em;">
-                        没有 Access Key？
-                    </span>
-                ''', unsafe_allow_html=True)
-
-                if st.button("→ 获取 Access Key", type="secondary", use_container_width=True):
-                    st.query_params["tab"] = "3"
-                    st.rerun()
-
-                st.markdown('</div>', unsafe_allow_html=True)
-
-            # 水印
-            key_mask = st.session_state.get('verified_key_mask')
-            render_watermark(key_mask)
-
-        else:
-            # 数据加载失败
-            st.markdown('''
-            <div class="info-card" style="text-align: center; padding: 40px;">
-                <div style="font-size: 1.1em; color: var(--text-muted); margin-bottom: 12px;">
-                    数据加载中...
-                </div>
-                <div style="font-size: 0.85em; color: var(--text-muted);">
-                    请确保 GitHub 数据源可访问
-                </div>
+            # 显示Key信息
+            key_mask = st.session_state.get('verified_key_mask', '')
+            st.markdown(f'''
+            <div style="text-align: center; margin: 16px 0;">
+                <span style="
+                    background: rgba(201, 162, 39, 0.1);
+                    border: 1px solid rgba(201, 162, 39, 0.3);
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                    font-size: 0.78em;
+                    color: var(--gold-accent);
+                ">
+                    已解锁 | {key_mask}
+                </span>
             </div>
             ''', unsafe_allow_html=True)
+        else:
+            # 未解锁：显示预览 + 锁定
+            render_signal_table(df_top10, unlocked=False, limit=2)
+
+            # 引导输入Key
+            st.markdown('<div style="margin: 20px 0;">', unsafe_allow_html=True)
+
+            access_key, confirm = render_access_input()
+
+            if confirm and access_key:
+                result = validate_access_key(access_key)
+                if result.get('valid'):
+                    st.session_state.verified_key = access_key
+                    st.session_state.verified_key_mask = result.get('key_mask', mask_key(access_key))
+                    st.success("✅ 验证成功！")
+                    st.rerun()
+                else:
+                    st.error("❌ 无效或已过期的 Access Key")
+
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            # 快捷入口
+            st.markdown('<div style="text-align: center; margin: 16px 0;">', unsafe_allow_html=True)
+            st.markdown('<span style="color: var(--text-muted); font-size: 0.85em;">没有 Access Key？</span>', unsafe_allow_html=True)
+            if st.button("→ 获取 Access Key", type="secondary", use_container_width=True):
+                st.query_params["tab"] = "3"
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # 水印
+        key_mask = st.session_state.get('verified_key_mask')
+        render_watermark(key_mask)
 
     elif current_tab == 1:
         # ===== 行情视图页 =====
 
-        # 显示Regime徽章（使用regime_latest）
-        if regime_latest:
-            risk_on = regime_latest.get('risk_on', 0)
-            is_risk_on = risk_on == 1
+        # 验证状态
+        verified = st.session_state.get('verified_key') is not None
+
+        # Regime徽章
+        if snapshot:
+            is_risk_on = snapshot.get('market_regime', '').lower() in ['risk on', 'risk_on']
             st.markdown(f'''
             <div style="position: absolute; top: 60px; right: 20px; z-index: 10;">
                 <span style="
@@ -1417,9 +1387,6 @@ def main():
                 </span>
             </div>
             ''', unsafe_allow_html=True)
-
-        # 验证状态
-        verified = st.session_state.get('verified_key') is not None
 
         if not verified:
             render_locked_prompt("行情视图")
@@ -1444,7 +1411,7 @@ def main():
 
             render_watermark()
         else:
-            # 已解锁：显示图表
+            # 已解锁
             st.markdown('''
             <div style="margin-bottom: 16px;">
                 <span style="
@@ -1460,38 +1427,32 @@ def main():
             </div>
             ''', unsafe_allow_html=True)
 
-            # 股票选择器（从web_top10加载）
-            if latest_dir:
-                df_top10 = load_web_top10(latest_dir)
-                if not df_top10.empty and 'Symbol' in df_top10.columns:
-                    stock_options = [f"{row['Symbol']}" for _, row in df_top10.iterrows()]
-
-                    selected = st.selectbox("选择股票", options=stock_options, index=0)
-
-                    if selected:
-                        symbol = get_tradingview_symbol(selected)
-                        render_tradingview_chart(symbol)
+            # 股票选择器
+            if not df_top10.empty and 'Symbol' in df_top10.columns:
+                stock_options = [f"{row['Symbol']}" for _, row in df_top10.iterrows()]
+                selected = st.selectbox("选择股票", options=stock_options, index=0)
+                if selected:
+                    symbol = get_tradingview_symbol(selected)
+                    render_tradingview_chart(symbol)
             else:
-                # 手动输入
                 ticker = st.text_input("输入股票代码", placeholder="600519, 000001, 300624", max_chars=6)
-
                 if ticker:
                     code = ticker.strip().zfill(6)
                     if len(code) == 6 and code.isdigit():
                         symbol = get_tradingview_symbol(code)
                         render_tradingview_chart(symbol)
 
-            # 水印
             key_mask = st.session_state.get('verified_key_mask')
             render_watermark(key_mask)
 
     elif current_tab == 2:
         # ===== 历史记录页 =====
 
-        # 渲染Regime卡片（使用regime_latest）
-        render_regime_card(snapshot=regime_snapshot, latest=regime_latest)
+        # Regime卡片
+        render_regime_card(snapshot)
 
-        render_history_page(df_history, regime_latest)
+        # 历史记录
+        render_history_page(df_history, snapshot)
         render_watermark(st.session_state.get('verified_key_mask'))
 
     else:
