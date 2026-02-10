@@ -39,34 +39,7 @@ SNAPSHOT_FILE = os.path.join(APP_DIR, 'regime_snapshot.json')
 WEB_TOP10_FILE = os.path.join(APP_DIR, 'web_top10.csv')
 HISTORY_FILE = os.path.join(APP_DIR, 'regime_history.csv')
 
-# 【可选：远程模式】如需从 GitHub 加载，定义以下变量
-"""
-GITHUB_RAW_BASE = "https://raw.githubusercontent.com/<username>/<repo>/main/"
-SNAPSHOT_URL = GITHUB_RAW_BASE + "regime_snapshot.json"
-WEB_TOP10_URL = GITHUB_RAW_BASE + "web_top10.csv"
-HISTORY_URL = GITHUB_RAW_BASE + "regime_history.csv"
-"""
-
-# ==================== 数据源路径（极简本地文件） ====================
-
-APP_DIR = os.path.dirname(__file__)
-
-# 本地文件路径
-SNAPSHOT_FILE = os.path.join(APP_DIR, 'regime_snapshot.json')
-WEB_TOP10_FILE = os.path.join(APP_DIR, 'web_top10.csv')
-HISTORY_FILE = os.path.join(APP_DIR, 'regime_history.csv')
-
-# 【可选：远程模式】如需从 GitHub 加载，取消注释以下代码
-# 并注释掉上面的本地文件路径
-"""
-GITHUB_RAW_BASE = "https://raw.githubusercontent.com/<username>/<repo>/main/"
-SNAPSHOT_URL = GITHUB_RAW_BASE + "regime_snapshot.json"
-WEB_TOP10_URL = GITHUB_RAW_BASE + "web_top10.csv"
-HISTORY_URL = GITHUB_RAW_BASE + "regime_history.csv"
-"""
-
-# ==================== 订阅配置 ====================
-
+# 订阅配置
 KEY_VALIDITY_DAYS = 30
 SHARE_CONFIG = {
     'max_devices_per_key': 2,
