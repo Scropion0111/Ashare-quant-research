@@ -66,12 +66,12 @@ def load_regime_snapshot() -> Optional[Dict]:
     """
     try:
         if os.path.exists(SNAPSHOT_FILE):
-            with open(SNAPSHOT_FILE, 'r', encoding='utf-8') as f:
+            # 使用 UTF-8-sig 编码来移除 BOM 头
+            with open(SNAPSHOT_FILE, 'r', encoding='utf-8-sig') as f:
                 content = f.read()
                 data = json.loads(content)
                 return data
-        else:
-            return None
+        return None
     except json.JSONDecodeError as e:
         return None
     except Exception as e:
@@ -128,6 +128,20 @@ def render_debug_info():
     with st.expander("🔧 调试信息", expanded=False):
         st.write(f"**APP_DIR**: `{APP_DIR}`")
         st.write(f"**SNAPSHOT_FILE**: `{SNAPSHOT_FILE}` (存在: {os.path.exists(SNAPSHOT_FILE)})")
+        
+        # 显示 JSON 内容
+        if os.path.exists(SNAPSHOT_FILE):
+            try:
+                with open(SNAPSHOT_FILE, 'r', encoding='utf-8-sig') as f:
+                    content = f.read()
+                    st.write("**JSON 内容**:")
+                    st.code(content, language='json')
+                    
+                data = json.loads(content)
+                st.write("**解析成功**:", data)
+            except Exception as e:
+                st.error(f"**解析失败**: {e}")
+        
         st.write(f"**WEB_TOP10_FILE**: `{WEB_TOP10_FILE}` (存在: {os.path.exists(WEB_TOP10_FILE)})")
         st.write(f"**HISTORY_FILE**: `{HISTORY_FILE}` (存在: {os.path.exists(HISTORY_FILE)})")
 
