@@ -1095,7 +1095,7 @@ def render_signal_featured(row, name: str, rank: int = 1):
     <div class="signal-card signal-featured">
         <div class="label">🏆 模型输出结果 #{rank}</div>
         <div class="stock-code">{code} <span class="stock-name">{name}</span></div>
-        <div class="signal-score" style="margin-top:8px;">因子得分：{score*100:.2f}</div>
+        <div class="signal-score" style="margin-top:8px;">因子得分：{score*1000:.2f}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1109,7 +1109,7 @@ def render_signal_silver(rank: int, row, name: str):
     <div class="signal-card signal-silver">
         <div class="label">🥈 模型输出结果 #{rank}</div>
         <div class="stock-code">{code} <span class="stock-name">{name}</span></div>
-        <div class="signal-score" style="margin-top:6px;">因子得分：{score*100:.2f}</div>
+        <div class="signal-score" style="margin-top:6px;">因子得分：{score*1000:.2f}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1123,7 +1123,7 @@ def render_signal_other(rank: int, row, name: str):
     <div class="signal-card signal-other">
         <div class="label">🥉 模型输出结果 #{rank}</div>
         <div class="stock-code">{code} <span class="stock-name">{name}</span></div>
-        <div class="signal-score" style="margin-top:4px;">因子得分：{score*100:.2f}</div>
+        <div class="signal-score" style="margin-top:4px;">因子得分：{score*1000:.2f}</div>
     </div>
     """, unsafe_allow_html=True)
 
